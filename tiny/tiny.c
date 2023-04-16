@@ -11,9 +11,9 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, char *method);
 void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
 
@@ -57,7 +57,7 @@ void doit(int fd)
     printf("%s", buf);
     sscanf(buf, "%s %s %s", method, uri, version);
     // method 가 "GET"이 아니면 조건문 실행       
-    if (strcasecmp(method, "GET")) {                     
+    if (strcasecmp(method, "GET") && strcasecmp(method,"HEAD")) {                     
         clienterror(fd, method, "501", "Not Implemented",
                     "Tiny does not implement this method");
         return;
@@ -78,7 +78,7 @@ void doit(int fd)
 			"Tiny couldn't read the file");
 	    return;
 	}
-	serve_static(fd, filename, sbuf.st_size);        
+	serve_static(fd, filename, sbuf.st_size, method);        
     }
     else { /* Serve dynamic content */
 	if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) { 
@@ -86,7 +86,7 @@ void doit(int fd)
 			"Tiny couldn't run the CGI program");
 	    return;
 	}
-	serve_dynamic(fd, filename, cgiargs);           
+	serve_dynamic(fd, filename, cgiargs, method);           
     }
 }
 
@@ -162,12 +162,15 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 	}
 }
 
-void serve_static(int fd, char *filename, int filesize)
+void serve_static(int fd, char *filename, int filesize, char *method)
 {
     int srcfd;
     char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
+    printf("==============%s", method);
     /* Send response headers to client */
+
+    if (strcasecmp(method, "GET") == 0){
     get_filetype(filename, filetype);    
     sprintf(buf, "HTTP/1.0 200 OK\r\n"); 
     Rio_writen(fd, buf, strlen(buf));
@@ -176,8 +179,8 @@ void serve_static(int fd, char *filename, int filesize)
     sprintf(buf, "Content-length: %d\r\n", filesize);
     Rio_writen(fd, buf, strlen(buf));
     sprintf(buf, "Content-type: %s\r\n\r\n", filetype);
-    Rio_writen(fd, buf, strlen(buf));    
-
+    Rio_writen(fd, buf, strlen(buf));
+  
     /* Send response body to client */
     srcfd = Open(filename, O_RDONLY, 0); 
     // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); 
@@ -186,7 +189,19 @@ void serve_static(int fd, char *filename, int filesize)
     Close(srcfd);                       
     Rio_writen(fd, srcp, filesize);     
     // Munmap(srcp, filesize);  
-    free(srcp);        
+    free(srcp);   
+    } 
+    else if (strcasecmp(method, "HEAD") == 0){
+        get_filetype(filename, filetype);    
+        sprintf(buf, "HTTP/1.0 200 OK\r\n"); 
+        Rio_writen(fd, buf, strlen(buf));
+        sprintf(buf, "Server: Tiny Web Server\r\n");
+        Rio_writen(fd, buf, strlen(buf));
+        sprintf(buf, "Content-length: %d\r\n", filesize);
+        Rio_writen(fd, buf, strlen(buf));
+        sprintf(buf, "Content-type: %s\r\n\r\n", filetype);
+        Rio_writen(fd, buf, strlen(buf));
+    }    
 }
 /*
  * get_filetype - derive file type from file name
@@ -207,10 +222,11 @@ void get_filetype(char *filename, char *filetype)
 	strcpy(filetype, "text/plain");
 }
 
-void serve_dynamic(int fd, char *filename, char *cgiargs) 
+void serve_dynamic(int fd, char *filename, char *cgiargs, char *method) 
 {
     char buf[MAXLINE], *emptylist[] = { NULL };
 
+    if (strcasecmp(method, "GET") == 0){
     /* Return first part of HTTP response */
     sprintf(buf, "HTTP/1.0 200 OK\r\n"); 
     Rio_writen(fd, buf, strlen(buf));
@@ -224,4 +240,14 @@ void serve_dynamic(int fd, char *filename, char *cgiargs)
 	Execve(filename, emptylist, environ); /* Run CGI program */
     }
     Wait(NULL); /* Parent waits for and reaps child */ 
+    }
+
+    else if (strcasecmp(method, "HEAD") == 0){
+        /* Return first part of HTTP response */
+        sprintf(buf, "HTTP/1.0 200 OK\r\n"); 
+        Rio_writen(fd, buf, strlen(buf));
+        sprintf(buf, "Server: Tiny Web Server\r\n");
+        Rio_writen(fd, buf, strlen(buf));
+    }
+
 }
