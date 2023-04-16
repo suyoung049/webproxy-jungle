@@ -55,7 +55,8 @@ void doit(int fd)
     if (!Rio_readlineb(&rio, buf, MAXLINE))  
         return;
     printf("%s", buf);
-    sscanf(buf, "%s %s %s", method, uri, version);       
+    sscanf(buf, "%s %s %s", method, uri, version);
+    // method 가 "GET"이 아니면 조건문 실행       
     if (strcasecmp(method, "GET")) {                     
         clienterror(fd, method, "501", "Not Implemented",
                     "Tiny does not implement this method");
@@ -133,10 +134,18 @@ int parse_uri(char *uri, char *filename, char *cgiargs)
 
 	if (!strstr(uri, "cgi-bin")){
 		strcpy(cgiargs, "");
+        printf("x=%s\n", cgiargs);
 		strcpy(filename, ".");
 		strcat(filename, uri);
-		if (uri[strlen(uri)-1] == '/')
-			strcat(filename, "home.html");
+        printf("uri = %s\n",filename);
+		if (uri[strlen(uri)-1] == '/'){
+			strcat(filename,  "home.html");
+            printf("file = %s\n", filename);
+        }
+        else if (strcmp(uri,"/go") == 0){
+            strcat(filename, ".html");
+            printf("file = %s\n", filename);
+        }
 		return 1;
 	}
 	else {
@@ -171,10 +180,13 @@ void serve_static(int fd, char *filename, int filesize)
 
     /* Send response body to client */
     srcfd = Open(filename, O_RDONLY, 0); 
-    srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); 
+    // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); 
+    srcp = malloc(filesize);
+    Rio_readn(srcfd, srcp, filesize);
     Close(srcfd);                       
     Rio_writen(fd, srcp, filesize);     
-    Munmap(srcp, filesize);             
+    // Munmap(srcp, filesize);  
+    free(srcp);        
 }
 /*
  * get_filetype - derive file type from file name
