@@ -158,8 +158,7 @@ void doit(int fd)
         Rio_writen(fd, server_buf, n);
 
         if(strlen(data) + strlen(server_buf) < MAX_OBJECT_SIZE){
-            strcpy(data, server_buf);
-            printf("_________%s", data);
+            strcat(data, server_buf);
         }else{
             cache_check = 0;
         }
@@ -170,7 +169,7 @@ void doit(int fd)
     if (cache_check == 1){
         insert_cache(proxy_cache, uri, data);
     }
-    }
+}
 }
 
 void clienterror(int fd, char *cause, char *errnum, 
